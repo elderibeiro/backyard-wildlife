@@ -1,0 +1,48 @@
+# Example dashboard view. Import as a new dashboard, or paste the view into
+# an existing one. Install LLM Vision's timeline card and the
+# wildlife-visits-card.js resource first.
+#
+# Resources (Settings → Dashboards → Resources):
+#   /local/wildlife-visits-card.js    type: module
+#   (plus the LLM Vision card, usually installed with the integration)
+#
+# Copy www/wildlife-visits-card.js to config/www/wildlife-visits-card.js
+# so Home Assistant serves it at /local/wildlife-visits-card.js.
+
+title: Backyard Wildlife
+views:
+  - title: Wildlife
+    path: wildlife
+    icon: mdi:paw
+    type: sections
+    sections:
+      - type: grid
+        cards:
+          - type: markdown
+            content: >-
+              Recent animal visits, with a crop around each subject when the
+              model returns a bounding box. People, vehicles, and empty frames
+              stay off this list. Photos remain on your Home Assistant machine.
+          - type: entities
+            title: Latest sighting
+            entities:
+              - input_text.wildlife_latest_sighting
+              - input_number.wildlife_daily_calls
+              - input_number.wildlife_daily_cap
+              - input_boolean.wildlife_notifications
+          - type: glance
+            title: Visit counts
+            columns: 3
+            entities:
+              - entity: input_number.wildlife_squirrel
+              - entity: input_number.wildlife_rabbit
+              - entity: input_number.wildlife_bird
+              - entity: input_number.wildlife_cat
+              - entity: input_number.wildlife_opossum
+              - entity: input_number.wildlife_other_animal
+          - type: custom:wildlife-visits-card
+            title: Recent Visits
+            # LLM Vision timeline card options. Hide people and empty results
+            # in the automation (it only writes animal events). If a leftover
+            # non-animal event appears, it can still be filtered in the card UI.
+            number_of_events: 12

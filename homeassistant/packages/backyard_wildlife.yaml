@@ -1,0 +1,548 @@
+# Backyard Wildlife — Home Assistant package
+#
+# Drop this file in config/packages/ and enable packages in configuration.yaml:
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Before reloading, replace the example cameras and motion sensors below with
+# your own entity IDs. Do not paste API keys into this file.
+#
+# Recommended stack (matches the architecture used in a real household setup
+# as of November 2026):
+#   - LLM Vision (HACS / Marketplace): https://github.com/valentinfrlch/ha-llmvision
+#   - A Gemini provider in LLM Vision (default). OpenAI, xAI (Custom OpenAI
+#     at https://api.x.ai/v1), and local Ollama are supported as alternates.
+#   - Defaults: 5-minute per-camera cooldown, 150 vision calls a day,
+#     1024-pixel frames, up to 3 video frames. Notifications stay off until
+#     you turn on input_boolean.wildlife_notifications.
+#
+# Official Home Assistant alternative for a single snapshot (not clips):
+#   action: ai_task.generate_data   # see docs/home-assistant.md
+# Do not use google_generative_ai_conversation.generate_content; that action
+# was deprecated and is removed in Home Assistant 2026.4.
+#
+# This file uses placeholder entity IDs:
+#   binary_sensor.backyard_motion, binary_sensor.garden_motion, binary_sensor.porch_motion
+#   camera.backyard, camera.garden, camera.porch
+# Edit them before you load the package.
+
+input_number:
+  wildlife_squirrel:
+    name: Squirrel visits
+    min: 0
+    max: 100000
+    step: 1
+    mode: box
+    icon: mdi:rodent
+  wildlife_opossum:
+    name: Opossum visits
+    min: 0
+    max: 100000
+    step: 1
+    mode: box
+    icon: mdi:paw
+  wildlife_rabbit:
+    name: Rabbit visits
+    min: 0
+    max: 100000
+    step: 1
+    mode: box
+    icon: mdi:rabbit
+  wildlife_bird:
+    name: Bird visits
+    min: 0
+    max: 100000
+    step: 1
+    mode: box
+    icon: mdi:bird
+  wildlife_cat:
+    name: Cat visits
+    min: 0
+    max: 100000
+    step: 1
+    mode: box
+    icon: mdi:cat
+  wildlife_other_animal:
+    name: Other animal visits
+    min: 0
+    max: 100000
+    step: 1
+    mode: box
+    icon: mdi:paw-outline
+  wildlife_daily_calls:
+    name: Wildlife API calls today
+    min: 0
+    max: 100000
+    step: 1
+    mode: box
+    icon: mdi:counter
+  wildlife_daily_cap:
+    name: Wildlife daily API cap
+    min: 1
+    max: 1000
+    step: 1
+    mode: box
+    icon: mdi:speedometer
+    initial: 150
+  wildlife_cooldown_seconds:
+    name: Wildlife cooldown seconds
+    min: 0
+    max: 3600
+    step: 30
+    mode: box
+    icon: mdi:timer-outline
+    initial: 300
+
+input_datetime:
+  wildlife_last_backyard:
+    name: Last wildlife analysis · Backyard
+    has_date: true
+    has_time: true
+    icon: mdi:clock-outline
+  wildlife_last_garden:
+    name: Last wildlife analysis · Garden
+    has_date: true
+    has_time: true
+    icon: mdi:clock-outline
+  wildlife_last_porch:
+    name: Last wildlife analysis · Porch
+    has_date: true
+    has_time: true
+    icon: mdi:clock-outline
+
+input_text:
+  wildlife_provider_id:
+    name: LLM Vision provider id
+    max: 40
+    icon: mdi:key-outline
+  wildlife_model:
+    name: Wildlife vision model
+    initial: gemini-3.5-flash-lite
+    max: 80
+    icon: mdi:creation
+  wildlife_local_tips:
+    name: Wildlife local tips
+    initial: ""
+    max: 255
+    icon: mdi:map-marker-outline
+  wildlife_latest_sighting:
+    name: Latest wildlife sighting
+    max: 255
+    icon: mdi:eye-outline
+  wildlife_regular_01:
+    name: Wildlife regular 1
+    max: 255
+  wildlife_regular_02:
+    name: Wildlife regular 2
+    max: 255
+  wildlife_regular_03:
+    name: Wildlife regular 3
+    max: 255
+  wildlife_regular_04:
+    name: Wildlife regular 4
+    max: 255
+  wildlife_regular_05:
+    name: Wildlife regular 5
+    max: 255
+  wildlife_regular_06:
+    name: Wildlife regular 6
+    max: 255
+  wildlife_regular_07:
+    name: Wildlife regular 7
+    max: 255
+  wildlife_regular_08:
+    name: Wildlife regular 8
+    max: 255
+  wildlife_regular_09:
+    name: Wildlife regular 9
+    max: 255
+  wildlife_regular_10:
+    name: Wildlife regular 10
+    max: 255
+  wildlife_regular_11:
+    name: Wildlife regular 11
+    max: 255
+  wildlife_regular_12:
+    name: Wildlife regular 12
+    max: 255
+
+input_boolean:
+  wildlife_notifications:
+    name: Wildlife notifications
+    icon: mdi:bell-outline
+    # Default is off. Turn this on only after you have chosen a notify target.
+
+automation:
+  - id: backyard_wildlife_recognition
+    alias: Backyard wildlife recognition
+    description: >-
+      On motion, wait briefly, then ask LLM Vision to identify any animal.
+      Enforces a per-camera cooldown and a daily call cap. Skips people,
+      vehicles, and empty frames when writing Recent Visits. Never uses
+      stream_analyzer. Notifications stay optional.
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: state
+        entity_id:
+          - binary_sensor.backyard_motion
+          - binary_sensor.garden_motion
+          - binary_sensor.porch_motion
+        from: "off"
+        to: "on"
+        id: motion
+      - trigger: time
+        at: "00:00:00"
+        id: daily_reset
+    conditions: []
+    actions:
+      - choose:
+          - conditions:
+              - condition: trigger
+                id: daily_reset
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.wildlife_daily_calls
+                data:
+                  value: 0
+          - conditions:
+              - condition: trigger
+                id: motion
+              - condition: template
+                value_template: >-
+                  {{ states('input_number.wildlife_daily_calls') | int(0)
+                     < states('input_number.wildlife_daily_cap') | int(150) }}
+              - condition: template
+                value_template: >-
+                  {% set cam = trigger.entity_id.split('.')[1] | replace('_motion','') %}
+                  {% set last = states('input_datetime.wildlife_last_' ~ cam) %}
+                  {% set gap = states('input_number.wildlife_cooldown_seconds') | int(300) %}
+                  {{ last in ['unknown', 'unavailable', ''] or (as_timestamp(last, 0) | int(0) == 0)
+                     or ((as_timestamp(now()) - as_timestamp(last, 0)) >= gap) }}
+            sequence:
+              - delay:
+                  seconds: 8
+              - variables:
+                  cam: "{{ trigger.entity_id.split('.')[1] | replace('_motion','') }}"
+                  camera_entity: "camera.{{ trigger.entity_id.split('.')[1] | replace('_motion','') }}"
+                  provider_id: "{{ states('input_text.wildlife_provider_id') }}"
+                  model_name: "{{ states('input_text.wildlife_model') or 'gemini-3.5-flash-lite' }}"
+                  regulars: >-
+                    {% set ns = namespace(l=[]) %}
+                    {% for n in range(1, 13) %}
+                      {% set e = 'input_text.wildlife_regular_%02d' % n %}
+                      {% set raw = states(e) %}
+                      {% if raw not in ['', 'unknown', 'unavailable'] %}
+                        {% set d = (raw[4:] if raw.startswith('reg:') else raw) | from_json(default={}) %}
+                        {% if d is mapping and d.get('n') %}
+                          {% set ns.l = ns.l + [dict(d, slot=e)] %}
+                        {% elif raw %}
+                          {% set ns.l = ns.l + [{'n': raw, 's': '', 'f': '', 'slot': e}] %}
+                        {% endif %}
+                      {% endif %}
+                    {% endfor %}
+                    {{ ns.l }}
+                  analyze_prompt: >-
+                    Identify animals in these outdoor camera frames. Return JSON.
+                    category: exactly one of squirrel, opossum, rabbit, bird, cat, other animal, none.
+                    species: specific common name when known, else the category word; none if category is none.
+                    count: number of animals of that species that are clearly visible, or 0.
+                    confidence: certain, likely, or uncertain (use uncertain if small, distant, blurry, or dark).
+                    behavior: a few words on what the animal is doing; empty if none.
+                    title: 2-6 words naming the species, starting with Likely or Uncertain when not certain.
+                    If category is none, name the main subject or use No activity observed.
+                    description: one short factual sentence. Do not describe a person's face or identity.
+                    features: for a cat or larger mammal with distinctive markings, up to 10 words; else empty.
+                    regular: name of a known regular only on a clear match; new if distinctive but unknown; else none.
+                    contains_person: true if a person is visible. contains_vehicle: true if a vehicle is visible.
+                    boxes: for the main animal, one entry per image where it is visible: frame (1 = first image)
+                    and box_2d [ymin, xmin, ymax, xmax] normalized 0-1000, tight around the body; empty if none.
+                    Never guess an animal from blur, leaves, shadows, or reflections. Use cat only when feline
+                    features are visible. Raccoon, skunk, dog, rat, or mouse: other animal.
+                    Local tips: {{ states('input_text.wildlife_local_tips') or 'none' }}.
+                    Known regulars:
+                    {% set r = regulars if regulars is list else [] %}
+                    {% if r | length == 0 %}none.{% else %}
+                    {% for x in r %}{{ x.n }} ({{ x.s }}): {{ x.f }}{{ '; ' if not loop.last else '.' }}{% endfor %}
+                    {% endif %}
+                  event_start: "{{ now().isoformat() }}"
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.wildlife_daily_calls
+                data:
+                  value: "{{ states('input_number.wildlife_daily_calls') | int(0) + 1 }}"
+              - action: input_datetime.set_datetime
+                target:
+                  entity_id: "input_datetime.wildlife_last_{{ cam }}"
+                data:
+                  datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+              - action: llmvision.image_analyzer
+                continue_on_error: true
+                response_variable: wildlife_result
+                data:
+                  provider: "{{ provider_id }}"
+                  model: "{{ model_name }}"
+                  message: "{{ analyze_prompt }}"
+                  image_entity:
+                    - "{{ camera_entity }}"
+                  include_filename: false
+                  target_width: 1024
+                  max_tokens: 320
+                  store_in_timeline: false
+                  generate_title: false
+                  expose_images: true
+                  response_format: json
+                  title_field: title
+                  description_field: description
+                  structure:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - category
+                      - species
+                      - count
+                      - confidence
+                      - behavior
+                      - title
+                      - description
+                      - features
+                      - regular
+                      - contains_person
+                      - contains_vehicle
+                      - boxes
+                    properties:
+                      category:
+                        type: string
+                        enum:
+                          - squirrel
+                          - opossum
+                          - rabbit
+                          - bird
+                          - cat
+                          - other animal
+                          - none
+                      species:
+                        type: string
+                      count:
+                        type: integer
+                      confidence:
+                        type: string
+                        enum:
+                          - certain
+                          - likely
+                          - uncertain
+                      behavior:
+                        type: string
+                      title:
+                        type: string
+                      description:
+                        type: string
+                      features:
+                        type: string
+                      regular:
+                        type: string
+                      contains_person:
+                        type: boolean
+                      contains_vehicle:
+                        type: boolean
+                      boxes:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: false
+                          required:
+                            - frame
+                            - box_2d
+                          properties:
+                            frame:
+                              type: integer
+                            label:
+                              type: string
+                            box_2d:
+                              type: array
+                              items:
+                                type: integer
+              - variables:
+                  wildlife_parse: >-
+                    {% set cats = ['squirrel','opossum','rabbit','bird','cat','other animal','none'] %}
+                    {% set r = wildlife_result | default({}) %}
+                    {% set raw = r.response if r is mapping and r.get('response') is not none else r %}
+                    {% if raw is string %}
+                      {% set t = raw | trim %}
+                      {% set parsed = t | from_json(default={}) if t.startswith('{') else {} %}
+                    {% elif raw is mapping %}
+                      {% set parsed = raw.structured_response if raw.get('structured_response') is mapping else raw %}
+                    {% else %}
+                      {% set parsed = {} %}
+                    {% endif %}
+                    {% if parsed is mapping and parsed.get('structured_response') is mapping %}
+                      {% set parsed = parsed.structured_response %}
+                    {% endif %}
+                    {% set cat = (parsed.category | default('') | string | lower | trim) %}
+                    {% if cat not in cats %}
+                      {% set s = (parsed.species | default('none') | string | lower | trim) %}
+                      {% set cat = s if s in cats else 'none' %}
+                    {% endif %}
+                    {% set name = (parsed.species | default('') | string | trim) %}
+                    {% if cat == 'none' %}
+                      {% set name = 'none' %}
+                    {% elif name == '' or name | lower in cats %}
+                      {% set name = cat %}
+                    {% endif %}
+                    {% set conf = (parsed.confidence | default('') | string | lower | trim) %}
+                    {% if conf not in ['certain','likely','uncertain'] %}
+                      {% set conf = 'uncertain' %}
+                    {% endif %}
+                    {% set count = parsed.count | int(0) %}
+                    {% if cat != 'none' and count < 1 %}{% set count = 1 %}{% endif %}
+                    {% set person = parsed.contains_person | default(false) | bool %}
+                    {% set vehicle = parsed.contains_vehicle | default(false) | bool %}
+                    {{
+                      {
+                        'category': cat,
+                        'species': name,
+                        'count': count,
+                        'confidence': conf,
+                        'behavior': parsed.behavior | default('') | string,
+                        'title': parsed.title | default('') | string,
+                        'description': parsed.description | default('') | string,
+                        'features': parsed.features | default('') | string,
+                        'regular': parsed.regular | default('none') | string,
+                        'contains_person': person,
+                        'contains_vehicle': vehicle,
+                        'boxes': parsed.boxes if parsed.boxes is list else [],
+                        'key_frame': (r.key_frame if r is mapping else '') or (raw.key_frame if raw is mapping else '')
+                      } | tojson
+                    }}
+              - variables:
+                  wl_event: >-
+                    {% set p = wildlife_parse if wildlife_parse is mapping else (wildlife_parse | string | from_json(default={})) %}
+                    {% set cat = p.get('category', 'none') %}
+                    {% set person = p.get('contains_person', false) %}
+                    {% set title = p.get('title') or p.get('species') or 'Motion detected' %}
+                    {% set desc = p.get('description') or title %}
+                    {% set bx = p.get('boxes') if p.get('boxes') is list else [] %}
+                    {% set u = namespace(y1=1001, x1=1001, y2=-1, x2=-1, n=0) %}
+                    {% for b in bx if b is mapping and b.get('box_2d') is list and b.box_2d | length == 4 %}
+                      {% set q = b.box_2d | map('int', -1) | list %}
+                      {% if q | min >= 0 and q | max <= 1000 and q[2] > q[0] and q[3] > q[1] %}
+                        {% set u.y1 = [u.y1, q[0]] | min %}
+                        {% set u.x1 = [u.x1, q[1]] | min %}
+                        {% set u.y2 = [u.y2, q[2]] | max %}
+                        {% set u.x2 = [u.x2, q[3]] | max %}
+                        {% set u.n = u.n + 1 %}
+                      {% endif %}
+                    {% endfor %}
+                    {% set crop = (' [crop:%d,%d,%d,%d]' % (u.y1, u.x1, u.y2, u.x2)) if (u.n > 0 and cat != 'none') else '' %}
+                    {{
+                      {
+                        'keep': cat != 'none' and not person,
+                        'category': cat,
+                        'title': title[:80],
+                        'description': (desc[:480] ~ crop),
+                        'label': cat if cat != 'none' else 'camera',
+                        'key_frame': p.get('key_frame') or ''
+                      } | tojson
+                    }}
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.wildlife_latest_sighting
+                data:
+                  value: >-
+                    {% set e = wl_event if wl_event is mapping else (wl_event | string | from_json(default={})) %}
+                    {% set p = wildlife_parse if wildlife_parse is mapping else (wildlife_parse | string | from_json(default={})) %}
+                    {{ (p.get('species') or e.get('title') or 'Motion') ~ ' · ' ~ cam ~ ' · ' ~
+                       now().strftime('%-I:%M %p') ~ ' · ' ~ (p.get('confidence') or '') }}
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: >-
+                          {% set e = wl_event if wl_event is mapping else (wl_event | string | from_json(default={})) %}
+                          {{ e.get('keep', false) }}
+                    sequence:
+                      - choose:
+                          - conditions:
+                              - condition: template
+                                value_template: >-
+                                  {% set p = wildlife_parse | default('{}') | from_json(default={}) %}
+                                  {{ p.get('category') == 'squirrel' }}
+                            sequence:
+                              - action: input_number.increment
+                                target:
+                                  entity_id: input_number.wildlife_squirrel
+                          - conditions:
+                              - condition: template
+                                value_template: >-
+                                  {% set p = wildlife_parse | default('{}') | from_json(default={}) %}
+                                  {{ p.get('category') == 'opossum' }}
+                            sequence:
+                              - action: input_number.increment
+                                target:
+                                  entity_id: input_number.wildlife_opossum
+                          - conditions:
+                              - condition: template
+                                value_template: >-
+                                  {% set p = wildlife_parse | default('{}') | from_json(default={}) %}
+                                  {{ p.get('category') == 'rabbit' }}
+                            sequence:
+                              - action: input_number.increment
+                                target:
+                                  entity_id: input_number.wildlife_rabbit
+                          - conditions:
+                              - condition: template
+                                value_template: >-
+                                  {% set p = wildlife_parse | default('{}') | from_json(default={}) %}
+                                  {{ p.get('category') == 'bird' }}
+                            sequence:
+                              - action: input_number.increment
+                                target:
+                                  entity_id: input_number.wildlife_bird
+                          - conditions:
+                              - condition: template
+                                value_template: >-
+                                  {% set p = wildlife_parse | default('{}') | from_json(default={}) %}
+                                  {{ p.get('category') == 'cat' }}
+                            sequence:
+                              - action: input_number.increment
+                                target:
+                                  entity_id: input_number.wildlife_cat
+                          - conditions:
+                              - condition: template
+                                value_template: >-
+                                  {% set p = wildlife_parse | default('{}') | from_json(default={}) %}
+                                  {{ p.get('category') == 'other animal' }}
+                            sequence:
+                              - action: input_number.increment
+                                target:
+                                  entity_id: input_number.wildlife_other_animal
+                      - alias: Add animal-only event to the LLM Vision timeline
+                        action: llmvision.create_event
+                        continue_on_error: true
+                        data:
+                          title: >-
+                            {% set e = wl_event if wl_event is mapping else (wl_event | string | from_json(default={})) %}
+                            {{ e.get('title', 'Animal visit') }}
+                          description: >-
+                            {% set e = wl_event if wl_event is mapping else (wl_event | string | from_json(default={})) %}
+                            {{ e.get('description', '') }}
+                          label: >-
+                            {% set e = wl_event if wl_event is mapping else (wl_event | string | from_json(default={})) %}
+                            {{ e.get('label', 'camera') }}
+                          image_path: >-
+                            {% set e = wl_event if wl_event is mapping else (wl_event | string | from_json(default={})) %}
+                            {{ e.get('key_frame', '') }}
+                          camera_entity: "{{ camera_entity }}"
+                          start_time: "{{ event_start }}"
+                      - choose:
+                          - conditions:
+                              - condition: state
+                                entity_id: input_boolean.wildlife_notifications
+                                state: "on"
+                            sequence:
+                              - action: notify.notify
+                                data:
+                                  title: Backyard Wildlife
+                                  message: >-
+                                    {% set e = wl_event if wl_event is mapping else (wl_event | string | from_json(default={})) %}
+                                    {{ e.get('title', 'Animal visit') }}

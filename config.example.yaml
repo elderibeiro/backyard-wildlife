@@ -1,0 +1,60 @@
+# Copy to config.yaml (gitignored) and edit. Secrets belong in the environment
+# or in a .env file, not in this file.
+
+camera:
+  # rtsp | picamera | images
+  type: rtsp
+  # Example only — use your own camera URL. Prefer a local account and a
+  # read-only stream. Do not commit real passwords.
+  url: rtsp://user:password@192.168.1.50:554/stream1
+  # For type: picamera, leave url empty and set index if needed.
+  index: 0
+  # Seconds between OpenCV frame grabs when watching a live stream.
+  frame_interval: 0.4
+
+motion:
+  # Minimum contour area in pixels after frame differencing.
+  min_area: 1200
+  # How much the frame can change (0-255) before it counts as motion.
+  threshold: 25
+  # Warm-up frames to ignore after the camera starts.
+  warmup_frames: 8
+
+limits:
+  # Per-camera gap between vision calls. 300 seconds matches the
+  # reference Home Assistant setup (approved November 2026).
+  cooldown_seconds: 300
+  # Local daily cap on vision calls, reset at midnight in `timezone`.
+  # This is a safety cap you control, not a provider quota.
+  daily_cap: 150
+  timezone: America/Chicago
+
+vision:
+  # gemini | openai | xai | ollama | dry_run
+  provider: gemini
+  # Default model used by the reference setup when Gemini 2.5 Flash
+  # was not available to new API keys. Override if your project lists
+  # a newer Flash or Flash-Lite model in Google AI Studio.
+  model: gemini-3.5-flash-lite
+  target_width: 1024
+  max_tokens: 320
+  # Optional regional hints, for example "eastern gray squirrels and
+  # cottontail rabbits are common daytime visitors." Leave empty for a
+  # generic prompt.
+  local_tips: ""
+
+privacy:
+  # Do not add people (or empty / vehicle-only scenes) to the gallery.
+  skip_persons: true
+  skip_empty: true
+  skip_vehicles: true
+  # Keep all files on this machine. Crops and the SQLite log live here.
+  data_dir: ./data
+
+gallery:
+  host: 127.0.0.1
+  port: 8080
+
+digest:
+  # Write a Markdown daily summary under data/digests/.
+  enabled: true

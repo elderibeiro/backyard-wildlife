@@ -1,0 +1,133 @@
+{
+  "note": "Synthetic demo frames only. Not photographs of a real yard or people.",
+  "images": {
+    "01-rabbit.jpg": {
+      "category": "rabbit",
+      "species": "eastern cottontail",
+      "count": 1,
+      "confidence": "certain",
+      "behavior": "sitting in the grass",
+      "title": "Eastern cottontail",
+      "description": "A cottontail rabbit is sitting in the grass near a fence.",
+      "features": "",
+      "regular": "none",
+      "contains_person": false,
+      "contains_vehicle": false,
+      "boxes": [
+        {
+          "frame": 1,
+          "box_2d": [
+            390,
+            427,
+            789,
+            671
+          ],
+          "label": "eastern cottontail"
+        }
+      ]
+    },
+    "02-squirrel.jpg": {
+      "category": "squirrel",
+      "species": "eastern gray squirrel",
+      "count": 1,
+      "confidence": "certain",
+      "behavior": "perched on the fence",
+      "title": "Eastern gray squirrel",
+      "description": "A squirrel is perched on the fence rail.",
+      "features": "",
+      "regular": "none",
+      "contains_person": false,
+      "contains_vehicle": false,
+      "boxes": [
+        {
+          "frame": 1,
+          "box_2d": [
+            179,
+            83,
+            445,
+            328
+          ],
+          "label": "eastern gray squirrel"
+        }
+      ]
+    },
+    "03-bird.jpg": {
+      "category": "bird",
+      "species": "northern cardinal",
+      "count": 1,
+      "confidence": "likely",
+      "behavior": "perched on a branch",
+      "title": "Likely northern cardinal",
+      "description": "A red bird is perched on a branch.",
+      "features": "",
+      "regular": "none",
+      "contains_person": false,
+      "contains_vehicle": false,
+      "boxes": [
+        {
+          "frame": 1,
+          "box_2d": [
+            148,
+            432,
+            320,
+            604
+          ],
+          "label": "northern cardinal"
+        }
+      ]
+    },
+    "04-person.jpg": {
+      "category": "none",
+      "species": "none",
+      "count": 0,
+      "confidence": "certain",
+      "behavior": "",
+      "title": "Person walking",
+      "description": "A person is in the frame; no animal is clearly visible.",
+      "features": "",
+      "regular": "none",
+      "contains_person": true,
+      "contains_vehicle": false,
+      "boxes": []
+    },
+    "05-empty.jpg": {
+      "category": "none",
+      "species": "none",
+      "count": 0,
+      "confidence": "certain",
+      "behavior": "",
+      "title": "No activity observed",
+      "description": "An empty yard with no animal visible.",
+      "features": "",
+      "regular": "none",
+      "contains_person": false,
+      "contains_vehicle": false,
+      "boxes": []
+    },
+    "06-pest.jpg": {
+      "category": "other animal",
+      "species": "Japanese beetle",
+      "count": 1,
+      "confidence": "likely",
+      "behavior": "on a leaf",
+      "title": "Likely Japanese beetle",
+      "description": "A small metallic beetle is sitting on a leaf.",
+      "features": "",
+      "regular": "none",
+      "contains_person": false,
+      "contains_vehicle": false,
+      "boxes": [
+        {
+          "frame": 1,
+          "box_2d": [
+            375,
+            354,
+            648,
+            677
+          ],
+          "label": "Japanese beetle"
+        }
+      ]
+    }
+  }
+}

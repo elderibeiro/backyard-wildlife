@@ -1,0 +1,132 @@
+blueprint:
+  name: Backyard Wildlife snapshot (AI Task)
+  description: >-
+    A simpler snapshot path that uses Home Assistant's built-in
+    ai_task.generate_data action instead of LLM Vision. Works well when your
+    AI integration provides an AI Task entity (OpenAI, Ollama, and Google
+    Gemini on versions that expose ai_task.google_ai_task or similar).
+
+    This path looks at one still image, not a video clip, and does not write
+    the LLM Vision timeline. Use the LLM Vision blueprint if you want Recent
+    Visits crops and clip analysis.
+
+    Requires Home Assistant 2025.8 or later and a preferred AI task entity,
+    or pass one explicitly.
+  domain: automation
+  author: Elder Lira
+  homeassistant:
+    min_version: "2025.8.0"
+  input:
+    motion_entity:
+      name: Motion or detection sensor
+      selector:
+        entity:
+          domain: binary_sensor
+    camera_entity:
+      name: Camera
+      selector:
+        entity:
+          domain: camera
+    ai_task_entity:
+      name: AI Task entity
+      description: For example ai_task.google_ai_task or an OpenAI / Ollama AI task. Leave empty to use the preferred entity.
+      default: ""
+      selector:
+        entity:
+          domain: ai_task
+    cooldown_seconds:
+      name: Cooldown
+      default: 300
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+    extra_instructions:
+      name: Extra instructions
+      default: ""
+      selector:
+        text:
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input motion_entity
+    from: "off"
+    to: "on"
+
+variables:
+  camera_entity: !input camera_entity
+  ai_task_entity: !input ai_task_entity
+  extra_instructions: !input extra_instructions
+
+actions:
+  - delay:
+      seconds: 5
+  - variables:
+      ai_task_data:
+        task_name: Backyard wildlife snapshot
+        instructions: >-
+          Identify animals in this outdoor camera image. If a person is visible,
+          set contains_person true and do not describe their face or identity.
+          {{ extra_instructions }}
+        structure:
+          category:
+            description: squirrel, opossum, rabbit, bird, cat, other animal, or none
+            required: true
+            selector:
+              text:
+          species:
+            description: Specific common name, or none
+            required: true
+            selector:
+              text:
+          count:
+            description: Number of animals of that species
+            required: true
+            selector:
+              number:
+          confidence:
+            description: certain, likely, or uncertain
+            required: true
+            selector:
+              text:
+          behavior:
+            description: Short behavior label
+            required: true
+            selector:
+              text:
+          contains_person:
+            description: True if a person is visible
+            required: true
+            selector:
+              boolean:
+          summary:
+            description: One short sentence, no personal details
+            required: true
+            selector:
+              text:
+        attachments:
+          media_content_id: "media-source://camera/{{ camera_entity }}"
+          media_content_type: image/jpeg
+  - action: ai_task.generate_data
+    response_variable: result
+    data: >-
+      {{ ai_task_data if not ai_task_entity else dict(ai_task_data, entity_id=ai_task_entity) }}
+  - if:
+      - condition: template
+        value_template: >-
+          {{ result.data.category not in ['none', ''] and not result.data.contains_person }}
+    then:
+      - action: logbook.log
+        data:
+          entity_id: "{{ camera_entity }}"
+          name: Backyard Wildlife
+          message: >-
+            {{ result.data.species }} · {{ result.data.confidence }} ·
+            {{ result.data.behavior }} — {{ result.data.summary }}
+          domain: ai_task
+  - delay:
+      seconds: !input cooldown_seconds

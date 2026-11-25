@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "backyard-wildlife"
+version = "0.1.0"
+description = "Privacy-first AI camera kit that identifies backyard animals on a Raspberry Pi or in Home Assistant."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Elder Lira" }]
+requires-python = ">=3.11"
+keywords = ["home-assistant", "raspberry-pi", "computer-vision", "wildlife", "gemini"]
+dependencies = [
+  "opencv-python-headless>=4.9",
+  "pillow>=10.0",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "yamllint>=1.35"]
+
+[project.scripts]
+backyard-wildlife = "backyard_wildlife.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+backyard_wildlife = ["prompts/*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,221 @@
+blueprint:
+  name: Backyard Wildlife (LLM Vision)
+  description: >-
+    When a motion (or person/animal) sensor trips, wait briefly, then ask LLM
+    Vision to identify any animal in a camera snapshot. Enforces a per-camera
+    cooldown and a daily call cap. People, empty frames, and vehicles are not
+    added to Recent Visits. Notifications are optional and off unless you
+    supply a notify action.
+
+    Install LLM Vision first, add a Gemini (default), OpenAI, xAI, or Ollama
+    provider, and paste that provider's id into the input below. Copy the
+    helpers from homeassistant/packages/backyard_wildlife.yaml, or create the
+    same input_number / input_datetime / input_text entities yourself.
+
+    Default limits: 300-second cooldown, 150 calls a day, 1024-pixel frames.
+  domain: automation
+  author: Elder Lira
+  homeassistant:
+    min_version: "2024.8.0"
+  input:
+    motion_entity:
+      name: Motion or detection sensor
+      description: A binary sensor that turns on when the camera sees motion, a person, or an animal.
+      selector:
+        entity:
+          domain: binary_sensor
+    camera_entity:
+      name: Camera
+      selector:
+        entity:
+          domain: camera
+    cooldown_helper:
+      name: Last-analysis datetime helper
+      description: One input_datetime per camera, used as the cooldown clock.
+      selector:
+        entity:
+          domain: input_datetime
+    daily_calls_helper:
+      name: Daily call counter
+      default: input_number.wildlife_daily_calls
+      selector:
+        entity:
+          domain: input_number
+    daily_cap_helper:
+      name: Daily call cap
+      default: input_number.wildlife_daily_cap
+      selector:
+        entity:
+          domain: input_number
+    llmvision_provider:
+      name: LLM Vision provider id
+      description: The provider entry id from Settings → Devices & services → LLM Vision. Not an API key.
+      selector:
+        text:
+    model:
+      name: Model
+      default: gemini-3.5-flash-lite
+      selector:
+        text:
+    analysis_delay:
+      name: Seconds to wait before the snapshot
+      default: 8
+      selector:
+        number:
+          min: 0
+          max: 60
+          unit_of_measurement: seconds
+    cooldown_seconds:
+      name: Cooldown
+      default: 300
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+    local_tips:
+      name: Local species tips
+      description: Optional hints such as "eastern gray squirrels and cottontails are common here."
+      default: ""
+      selector:
+        text:
+    notify_action:
+      name: Optional notify action
+      description: >-
+        Leave empty to stay quiet. Wire a notify action after import,
+        or use the package's input_boolean helper.
+      default: {}
+      selector:
+        action:
+    notifications_enabled:
+      name: Notifications enabled helper
+      default: input_boolean.wildlife_notifications
+      selector:
+        entity:
+          domain: input_boolean
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input motion_entity
+    from: "off"
+    to: "on"
+
+variables:
+  camera_entity: !input camera_entity
+  cooldown_helper: !input cooldown_helper
+  daily_calls_helper: !input daily_calls_helper
+  daily_cap_helper: !input daily_cap_helper
+  provider_id: !input llmvision_provider
+  model_name: !input model
+  local_tips: !input local_tips
+  cooldown_seconds: !input cooldown_seconds
+  notifications_enabled: !input notifications_enabled
+
+conditions:
+  - condition: template
+    value_template: "{{ states(daily_calls_helper) | int(0) < states(daily_cap_helper) | int(150) }}"
+  - condition: template
+    value_template: >-
+      {% set last = states(cooldown_helper) %}
+      {{ last in ['unknown', 'unavailable', ''] or (as_timestamp(last, 0) | int(0) == 0)
+         or ((as_timestamp(now()) - as_timestamp(last, 0)) >= cooldown_seconds) }}
+
+actions:
+  - delay:
+      seconds: !input analysis_delay
+  - action: input_number.set_value
+    target:
+      entity_id: !input daily_calls_helper
+    data:
+      value: "{{ states(daily_calls_helper) | int(0) + 1 }}"
+  - action: input_datetime.set_datetime
+    target:
+      entity_id: !input cooldown_helper
+    data:
+      datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+  - action: llmvision.image_analyzer
+    continue_on_error: true
+    response_variable: wildlife_result
+    data:
+      provider: "{{ provider_id }}"
+      model: "{{ model_name }}"
+      message: >-
+        Identify animals in these outdoor camera frames. Return JSON.
+        category: exactly one of squirrel, opossum, rabbit, bird, cat, other animal, none.
+        species: specific common name when known, else the category word; none if category is none.
+        count: number of clearly visible animals of that species, or 0.
+        confidence: certain, likely, or uncertain.
+        behavior: a few words on what the animal is doing; empty if none.
+        title: 2-6 words naming the species, starting with Likely or Uncertain when not certain.
+        description: one short factual sentence. Do not describe a person's face or identity.
+        features: distinctive markings for a cat or larger mammal, else empty.
+        regular: none.
+        contains_person: true if a person is visible. contains_vehicle: true if a vehicle is visible.
+        boxes: frame plus box_2d [ymin, xmin, ymax, xmax] normalized 0-1000 around the animal; empty if none.
+        Never guess an animal from blur, leaves, shadows, or reflections.
+        Local tips: {{ local_tips or 'none' }}.
+      image_entity:
+        - "{{ camera_entity }}"
+      include_filename: false
+      target_width: 1024
+      max_tokens: 320
+      store_in_timeline: false
+      generate_title: false
+      expose_images: true
+      response_format: json
+      title_field: title
+      description_field: description
+  - variables:
+      parsed: >-
+        {% set r = wildlife_result | default({}) %}
+        {% set raw = r.response if r is mapping and r.get('response') is not none else r %}
+        {% if raw is mapping and raw.get('structured_response') is mapping %}
+          {% set data = raw.structured_response %}
+        {% elif raw is mapping %}
+          {% set data = raw %}
+        {% elif raw is string and (raw | trim).startswith('{') %}
+          {% set data = raw | from_json(default={}) %}
+        {% else %}
+          {% set data = {} %}
+        {% endif %}
+        {{ data | tojson }}
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >-
+              {% set p = parsed | from_json(default={}) %}
+              {{ p.get('category', 'none') not in ['none', ''] and not p.get('contains_person', false) }}
+        sequence:
+          - action: llmvision.create_event
+            continue_on_error: true
+            data:
+              title: "{{ (parsed | from_json(default={})).get('title', 'Animal visit') }}"
+              description: >-
+                {% set p = parsed | from_json(default={}) %}
+                {% set desc = p.get('description') or p.get('title') or '' %}
+                {% set bx = p.get('boxes') if p.get('boxes') is list else [] %}
+                {% set u = namespace(y1=1001, x1=1001, y2=-1, x2=-1, n=0) %}
+                {% for b in bx if b is mapping and b.get('box_2d') is list and b.box_2d | length == 4 %}
+                  {% set q = b.box_2d | map('int', -1) | list %}
+                  {% if q | min >= 0 and q | max <= 1000 and q[2] > q[0] and q[3] > q[1] %}
+                    {% set u.y1 = [u.y1, q[0]] | min %}
+                    {% set u.x1 = [u.x1, q[1]] | min %}
+                    {% set u.y2 = [u.y2, q[2]] | max %}
+                    {% set u.x2 = [u.x2, q[3]] | max %}
+                    {% set u.n = u.n + 1 %}
+                  {% endif %}
+                {% endfor %}
+                {{ desc ~ ((' [crop:%d,%d,%d,%d]' % (u.y1, u.x1, u.y2, u.x2)) if u.n > 0 else '') }}
+              label: "{{ (parsed | from_json(default={})).get('category', 'camera') }}"
+              camera_entity: "{{ camera_entity }}"
+          - if:
+              - condition: template
+                value_template: "{{ is_state(notifications_enabled, 'on') }}"
+            then:
+              - action: notify.notify
+                data:
+                  title: Backyard Wildlife
+                  message: "{{ (parsed | from_json(default={})).get('title', 'Animal visit') }}"
